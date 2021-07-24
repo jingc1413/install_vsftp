@@ -1,0 +1,84 @@
+#!/bin/bash
+
+
+if [ -s /usr/sbin/vsftpd ];then
+        echo " "
+	echo "本机已经安装vsftpd"
+        echo " "
+else	
+	yum -y install vsftpd
+fi
+
+
+systemctl enable vsftpd
+
+cp /etc/vsftpd/vsftpd.conf /etc/vsftpd/vsftpd.conf.bak
+echo "" > /etc/vsftpd/vsftpd.conf
+cat >> /etc/vsftpd/vsftpd.conf << EOF
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+local_umask=022
+dirmessage_enable=YES
+xferlog_enable=YES
+connect_from_port_20=YES
+chown_uploads=NO
+xferlog_std_format=YES
+async_abor_enable=YES
+ascii_upload_enable=YES
+ascii_download_enable=YES
+listen=YES
+
+chroot_list_enable=yes
+chroot_local_user=yes
+allow_writeable_chroot=YES
+
+pam_service_name=vsftpd
+userlist_enable=YES
+tcp_wrappers=YES
+pasv_enable=YES
+EOF
+
+cp /etc/pam.d/vsftpd /etc/pam.d/vsftpd.bak
+echo "" > /etc/pam.d/vsftpd
+cat >> /etc/pam.d/vsftpd << EOF
+#%PAM-1.0
+session    optional     pam_keyinit.so    force revoke
+auth       required	pam_listfile.so item=user sense=deny file=/etc/vsftpd/ftpusers onerr=succeed
+#auth       required	pam_shells.so
+auth       include	password-auth
+account    include	password-auth
+session    required     pam_loginuid.so
+session    include	password-auth
+EOF
+
+while true
+ do
+  echo ""
+  read -p "请输入添加的ftp用户名称:" user
+  echo ""
+  vuser=`cat /etc/passwd|grep "$user"|sed -n "1,1p"|awk -F: '{print $1}'` 
+  if [ "$vuser" = "$user" ];then
+     echo "此用户已经存在,请重新输入"
+  else
+     echo ""
+     /usr/sbin/adduser -d /data/ftpdata -g ftp -s /sbin/nologin $user
+     echo ""
+     read -p "请输入$user 用户的密码:" ftppwd
+     echo ""
+     echo "$ftppwd"|passwd --stdin $user
+     break;
+  fi
+done
+
+mkdir -p /data/ftpdata/trade/report/certifactionPhoto
+mkdir -p /data/ftpdata/trade/bankprocessor/
+chmod -R 755 /data/ftpdata
+chown -R ftpuser:ftp /data/ftpdata
+
+systemctl restart vsftpd
+
+echo "+----------------------------------+"
+echo "+------- -VSFTP服务安装完成----------+"
+echo "+-VSFTP用户默认目录为/data/ftpdata---+"
+echo "+----------------------------------+"
